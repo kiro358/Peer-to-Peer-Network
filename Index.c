@@ -10,7 +10,7 @@
     char type;  // 'R'
     char peerName[10];
     char contentName[10];
-    struct sockaddr_in contentServerAddress;
+    // struct sockaddr_in contentServerAddress;
 };
 
 struct AcknowledgementPDU {
@@ -20,6 +20,41 @@ struct AcknowledgementPDU {
     struct sockaddr_in contentServerAddress;
 };
 
+struct SearchPDU {
+    char type;  // 'S'
+    char peerName[10];
+    char contentName[10];
+};
+
+struct SearchResponsePDU {
+    char type;  // 'S'
+    struct sockaddr_in contentServerAddress;
+};
+
+struct ListRequestPDU {
+    char type;  // 'O'
+    // Additional fields if needed
+};
+
+struct ContentListPDU {
+    char type;  // 'O'
+    char peerName[10];
+    char contentName[10];
+};
+
+struct DeregistrationPDU {
+    char type;  // 'T'
+    char peerName[10];
+    char contentName[10];
+};
+
+struct ContentDataPDU {
+    char type;  // 'C'
+    char peerName[10];
+    char contentName[10];
+    struct sockaddr_in contentServerAddress;
+    // This PDU may be used for transferring content data over TCP
+};
 
 void handleContentRegistration(int udpSocket) {
     // Implementation of content registration handling
