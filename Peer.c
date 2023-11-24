@@ -5,7 +5,10 @@
 #include <string.h>
 #include <arpa/inet.h>
 
-// Assume you have defined the PDU structures and socket-related functions
+// Define the PDU structures and socket-related functions
+
+struct sockaddr_in indexServerAddr;
+
  struct RegistrationPDU {
     char type;  // 'R'
     char peerName[10];
@@ -58,14 +61,14 @@ struct ContentDataPDU {
 
 void registerContent(int udpSocket, struct sockaddr_in indexServerAddr) {
     // Implementation of content registration
-    // Assume peerName, contentName, and contentServerAddr are properly initialized
+    // Assume peerName, contentName, and contentServerAddress are properly initialized
     struct RegistrationPDU registrationPDU;
     registrationPDU.type = 'R';
     strncpy(registrationPDU.peerName, "Peer1", sizeof(registrationPDU.peerName));
     strncpy(registrationPDU.contentName, "SampleMovie", sizeof(registrationPDU.contentName));
-    registrationPDU.contentServerAddr.sin_family = AF_INET;
-    registrationPDU.contentServerAddr.sin_port = htons(12345);  // Replace with the actual port
-    inet_pton(AF_INET, "127.0.0.1", &registrationPDU.contentServerAddr.sin_addr);
+    registrationPDU.contentServerAddress.sin_family = AF_INET;
+    registrationPDU.contentServerAddress.sin_port = htons(12345);  // Replace with the actual port
+    inet_pton(AF_INET, "127.0.0.1", &registrationPDU.contentServerAddress.sin_addr);
 
     // Send registration PDU to index server
     sendto(udpSocket, &registrationPDU, sizeof(registrationPDU), 0,
