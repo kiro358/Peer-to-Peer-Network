@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 #define BUFLEN		255	/* buffer length */
 
@@ -77,6 +78,52 @@ struct ContentDataPDU {
     // This PDU may be used for transferring content data over TCP
 };
 
+int isContentRegistered(const char *peerName, const char *contentName) {
+    for (int i = 0; i < numOfRegisteredContent; i++) {
+        if (strcmp(registeredContent[i].peerName, peerName) == 0 &&
+            strcmp(registeredContent[i].contentName, contentName) == 0) {
+            // Conflict detected
+            return 1;
+        }
+    }
+    // No conflict
+    return 0;
+}
+
+int addContent(const char *peerName, const char *contentName, const struct sockaddr_in *contentServerAddress){
+    if (numOfRegisteredContent<MAX_REGISTERED_CONTENT){
+        strcpy(registeredContent[numOfRegisteredContent].peerName, peerName);
+        strcpy(registeredContent[numOfRegisteredContent].contentName, contentName);
+        memcpy(&registeredContent[numOfRegisteredContent].contentServerAddress, contentServerAddress, sizeof(struct sockaddr_in));
+        numOfRegisteredContent++;
+        return 0;
+    }
+    else {
+        // Handle error: The array is full
+        fprintf(stderr, "Error adding the content, please try again after deregistering content");
+        return -1;
+    }
+}
+
+int removeContent(const char *peerName, const char *contentName) {
+    for (int i = 0; i < numOfRegisteredContent; i++) {
+        if (strcmp(registeredContent[i].peerName, peerName) == 0 &&
+            strcmp(registeredContent[i].contentName, contentName) == 0) {
+            // Shift elements to overwrite the entry to be removed
+            for (int j = i; j < numOfRegisteredContent - 1; j++) {
+                strcpy(registeredContent[j].peerName, registeredContent[j + 1].peerName);
+                strcpy(registeredContent[j].contentName, registeredContent[j + 1].contentName);
+                memcpy(&registeredContent[j].contentServerAddress, &registeredContent[j + 1].contentServerAddress, sizeof(struct sockaddr_in));
+            }
+            numOfRegisteredContent--;
+            return 0; // Found and removed, exit the function
+        }
+    }
+    // If the function reaches here, the content was not found
+    fprintf(stderr, "Content not found for deregistration: Peer: %s, Content: %s\n", peerName, contentName);
+    return -1;
+}
+
 void handleContentRegistration(int udpSocket) {
     // Implementation of content registration handling
     struct RegistrationPDU registrationPDU;
@@ -89,7 +136,15 @@ void handleContentRegistration(int udpSocket) {
     strcpy(peerName,registrationPDU.peerName);
     strcpy(contentName,registrationPDU.contentName);
     memcpy(&contentServerAddress,&registrationPDU.contentServerAddress, sizeof(struct sockaddr_in));
-    addContent(peerName, contentName, &contentServerAddress);
+    
+    if (isContentRegistered(peerName, contentName)) {
+        // Conflict detected, send an error (E-type PDU)
+        struct AcknowledgementPDU errorPDU;
+        errorPDU.type = 'E';
+        sendto(udpSocket, &errorPDU, sizeof(errorPDU), 0, NULL, 0);
+    }
+    
+    int added = addContent(peerName, contentName, &contentServerAddress);
 
 
     // Send acknowledgment (A-type PDU)
@@ -129,7 +184,7 @@ void handleContentListing(int udpSocket) {
         // Add each registered content entry to the PDU
         strcpy(contentListPDU.peerName, registeredContent[i].peerName);
         strcpy(contentListPDU.contentName, registeredContent[i].contentName);
-
+    }
     sendto(udpSocket, &contentListPDU, sizeof(contentListPDU), 0, NULL, 0);
 }
 
@@ -139,24 +194,16 @@ void handleContentDeregistration(int udpSocket) {
     recvfrom(udpSocket, &deregistrationPDU, sizeof(deregistrationPDU), 0, NULL, NULL);
 
     // Update data structures, send acknowledgment (A-type PDU), or error (E-type PDU)
-    // ...
-
-    // Send acknowledgment (A-type PDU)
-    struct AcknowledgementPDU acknowledgementPDU;
-    acknowledgementPDU.type = 'A';
-    sendto(udpSocket, &acknowledgementPDU, sizeof(acknowledgementPDU), 0, NULL, 0);
-}
-
-void addContent(const char *peerName, const char *contentName, const struct sockaddr_in *contentServerAddress){
-    if (numOfRegisteredContent<MAX_REGISTERED_CONTENT){
-        strcpy(registeredContent[numOfRegisteredContent].peerName, peerName);
-        strcpy(registeredContent[numOfRegisteredContent].contentName, contentName);
-        memcpy(&registeredContent[numOfRegisteredContent].contentServerAddress, &contentServerAddress, sizeof(struct sockaddr_in));
-        numOfRegisteredContent++;
+    int removed = removeContent(deregistrationPDU.peerName, deregistrationPDU.contentName);
+    if (removed ==0){
+        // Send acknowledgment (A-type PDU)
+        struct AcknowledgementPDU acknowledgementPDU;
+        acknowledgementPDU.type = 'A';
+        sendto(udpSocket, &acknowledgementPDU, sizeof(acknowledgementPDU), 0, NULL, 0);
     }
     else {
-        // Handle error: The array is full
-        fprintf(stderr, "Error adding the content, please try again after deregistering content");
+        // Send error (E-type PDU)
+
     }
 }
 
@@ -173,7 +220,7 @@ int main() {
     // Set up the address structure
     memset(&myAddress, 0, sizeof(myAddress));
     myAddress.sin_family = AF_INET;
-    myAddress.sin_port = htons(PORT);
+    myAddress.sin_port = htons(0);
     myAddress.sin_addr.s_addr = INADDR_ANY;
 
     // Bind the socket
